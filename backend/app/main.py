@@ -114,49 +114,85 @@ async def healthz():
 @app.websocket("/ws/analyze")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
+    print("🔗 WebSocket connection established")
     
     try:
         while True:
+            print("⏳ Waiting for message from client...")
             data = await websocket.receive_text()
+            print(f"📨 Received message: {len(data)} characters")
+            
             message = json.loads(data)
+            print(f"📋 Message type: {message.get('type', 'unknown')}")
             
             if message["type"] == "frame":
-                image_data = base64.b64decode(message["data"].split(",")[1])
-                nparr = np.frombuffer(image_data, np.uint8)
-                frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-                
-                rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                
-                results = pose.process(rgb_frame)
-                
-                response = {
-                    "type": "analysis",
-                    "pose_detected": False,
-                    "feedback": []
-                }
-                
-                if results.pose_landmarks:
-                    response["pose_detected"] = True
+                print("🎥 Processing frame data...")
+                try:
+                    image_data = base64.b64decode(message["data"].split(",")[1])
+                    print(f"🔓 Decoded image data: {len(image_data)} bytes")
                     
-                    analysis = form_analyzer.analyze_curl_form(results.pose_landmarks.landmark)
-                    response.update(analysis)
+                    nparr = np.frombuffer(image_data, np.uint8)
+                    frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+                    print(f"🖼️  Frame shape: {frame.shape if frame is not None else 'None'}")
                     
-                    landmarks = []
-                    for landmark in results.pose_landmarks.landmark:
-                        landmarks.append({
-                            "x": landmark.x,
-                            "y": landmark.y,
-                            "z": landmark.z,
-                            "visibility": landmark.visibility
-                        })
-                    response["landmarks"] = landmarks
-                
-                await websocket.send_text(json.dumps(response))
+                    if frame is None:
+                        print("❌ ERROR: Failed to decode frame")
+                        continue
+                    
+                    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                    print("🎨 Converted to RGB, running pose detection...")
+                    
+                    results = pose.process(rgb_frame)
+                    print(f"🤖 Pose detection complete. Landmarks detected: {results.pose_landmarks is not None}")
+                    
+                    response = {
+                        "type": "analysis",
+                        "pose_detected": False,
+                        "feedback": []
+                    }
+                    
+                    if results.pose_landmarks:
+                        print("🏃 Processing pose landmarks...")
+                        response["pose_detected"] = True
+                        
+                        analysis = form_analyzer.analyze_curl_form(results.pose_landmarks.landmark)
+                        response.update(analysis)
+                        print(f"💪 Form analysis: angle={analysis.get('elbow_angle', 'N/A'):.1f}°, phase={analysis.get('phase', 'N/A')}, reps={analysis.get('rep_count', 0)}")
+                        
+                        if analysis.get('feedback'):
+                            print(f"💬 Feedback: {analysis['feedback']}")
+                        
+                        landmarks = []
+                        for landmark in results.pose_landmarks.landmark:
+                            landmarks.append({
+                                "x": landmark.x,
+                                "y": landmark.y,
+                                "z": landmark.z,
+                                "visibility": landmark.visibility
+                            })
+                        response["landmarks"] = landmarks
+                        print(f"📍 Added {len(landmarks)} landmarks to response")
+                    else:
+                        print("❌ No pose landmarks detected")
+                    
+                    print("📤 Sending response to client...")
+                    await websocket.send_text(json.dumps(response))
+                    print("✅ Response sent successfully")
+                    
+                except Exception as frame_error:
+                    print(f"💥 Error processing frame: {frame_error}")
+                    import traceback
+                    traceback.print_exc()
+                    continue
+            else:
+                print(f"❓ Unknown message type: {message.get('type', 'none')}")
                 
     except WebSocketDisconnect:
-        print("Client disconnected")
+        print("👋 Client disconnected")
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"💥 WebSocket error: {e}")
+        import traceback
+        traceback.print_exc()
         await websocket.close()
 
 @app.post("/reset")
