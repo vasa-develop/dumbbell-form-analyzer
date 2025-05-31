@@ -36,6 +36,10 @@ class FormAnalyzer:
         self.rep_count = 0
         self.last_elbow_angle = None
         self.feedback_messages = []
+        self.last_feedback_time = {}  # Track when each type of feedback was last given
+        self.feedback_cooldown = 3.0  # Seconds between same feedback messages
+        import time
+        self.time = time
         
     def calculate_angle(self, a, b, c):
         """Calculate angle between three points"""
@@ -50,6 +54,16 @@ class FormAnalyzer:
             angle = 360 - angle
             
         return angle
+    
+    def _should_give_feedback(self, feedback_type):
+        """Check if enough time has passed to give this type of feedback again"""
+        current_time = self.time.time()
+        last_time = self.last_feedback_time.get(feedback_type, 0)
+        
+        if current_time - last_time >= self.feedback_cooldown:
+            self.last_feedback_time[feedback_type] = current_time
+            return True
+        return False
     
     def analyze_curl_form(self, landmarks):
         """Analyze dumbbell curl form and provide feedback"""
@@ -84,18 +98,18 @@ class FormAnalyzer:
         
         self.last_elbow_angle = primary_angle
         
-        if primary_angle < 30:
+        if primary_angle < 30 and self._should_give_feedback("top_squeeze"):
             feedback.append("Great! Full range of motion at the top.")
-        elif primary_angle < 60:
+        elif primary_angle < 60 and self.curl_phase == "up" and self._should_give_feedback("good_curl"):
             feedback.append("Good curl! Try to squeeze a bit more at the top.")
-        elif primary_angle > 160:
+        elif primary_angle > 160 and self.curl_phase == "down" and self._should_give_feedback("starting_position"):
             feedback.append("Good starting position. Keep your core tight.")
         
         shoulder_stability = abs(left_shoulder[1] - right_shoulder[1])
-        if shoulder_stability > 0.05:
+        if shoulder_stability > 0.05 and self._should_give_feedback("shoulder_stability"):
             feedback.append("Keep your shoulders stable. Avoid swinging.")
         
-        if abs(left_elbow[0] - left_shoulder[0]) > 0.15 or abs(right_elbow[0] - right_shoulder[0]) > 0.15:
+        if (abs(left_elbow[0] - left_shoulder[0]) > 0.15 or abs(right_elbow[0] - right_shoulder[0]) > 0.15) and self._should_give_feedback("elbow_position"):
             feedback.append("Keep your elbows close to your body.")
         
         return {
