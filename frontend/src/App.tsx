@@ -24,6 +24,7 @@ function App() {
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const wsRef = useRef<WebSocket | null>(null)
+  const isRecordingRef = useRef(false)
   
   const [isRecording, setIsRecording] = useState(false)
   const [isConnected, setIsConnected] = useState(false)
@@ -90,6 +91,7 @@ function App() {
       }
       
       setIsRecording(true)
+      isRecordingRef.current = true
       connectWebSocket()
       
       setTimeout(() => {
@@ -114,13 +116,14 @@ function App() {
     }
     
     setIsRecording(false)
+    isRecordingRef.current = false
     setIsConnected(false)
     setAnalysisData(null)
   }
 
   const sendFrames = () => {
-    if (!isRecording || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-      console.log('🛑 sendFrames stopped:', { isRecording, wsState: wsRef.current?.readyState })
+    if (!isRecordingRef.current || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+      console.log('🛑 sendFrames stopped:', { isRecording: isRecordingRef.current, wsState: wsRef.current?.readyState })
       return
     }
     
