@@ -120,6 +120,7 @@ function App() {
 
   const sendFrames = () => {
     if (!isRecording || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+      console.log('🛑 sendFrames stopped:', { isRecording, wsState: wsRef.current?.readyState })
       return
     }
     
@@ -127,6 +128,14 @@ function App() {
     const canvas = canvasRef.current
     
     if (video && canvas) {
+      console.log('📹 Video dimensions:', { width: video.videoWidth, height: video.videoHeight })
+      
+      if (video.videoWidth === 0 || video.videoHeight === 0) {
+        console.log('⏳ Video not ready yet, retrying...')
+        setTimeout(() => sendFrames(), 100)
+        return
+      }
+      
       const ctx = canvas.getContext('2d')
       if (ctx) {
         canvas.width = video.videoWidth
@@ -134,12 +143,15 @@ function App() {
         ctx.drawImage(video, 0, 0)
         
         const dataURL = canvas.toDataURL('image/jpeg', 0.8)
+        console.log('📤 Sending frame:', { size: dataURL.length, dimensions: `${video.videoWidth}x${video.videoHeight}` })
         
         wsRef.current.send(JSON.stringify({
           type: 'frame',
           data: dataURL
         }))
       }
+    } else {
+      console.log('❌ Video or canvas not available')
     }
     
     setTimeout(() => sendFrames(), 100)
